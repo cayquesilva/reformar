@@ -1,0 +1,22 @@
+{
+  "name": "@reformar/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Domínio compartilhado: dinheiro, quantidades, cálculo de orçamento, validações e permissões",
+  "exports": {
+    ".": "./src/index.ts",
+    "./i18n-en": "./src/i18n-en.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "decimal.js": "^10.6.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.0"
+  }
+}

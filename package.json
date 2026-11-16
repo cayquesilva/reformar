@@ -1,0 +1,39 @@
+{
+  "name": "reformar",
+  "private": true,
+  "type": "module",
+  "description": "SaaS de gestão de orçamentos e obras para profissionais da construção civil",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run db:migrate -w @reformar/api",
+    "db:seed:demo": "npm run seed:demo -w @reformar/api",
+    "dev": "concurrently -k -n api,web -c blue,green \"npm run dev -w @reformar/api\" \"npm run dev -w @reformar/web\"",
+    "lint": "eslint .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build -w @reformar/web && npm run build -w @reformar/api",
+    "start": "npm run start -w @reformar/api",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "telas": "node -e \"process.env.SCREENS=1;require('child_process').execSync('npx playwright test -c e2e/playwright.config.ts --project=telas',{stdio:'inherit',env:process.env})\""
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@eslint/js": "^10.0.0",
+    "@playwright/test": "^1.65.0",
+    "concurrently": "^9.2.0",
+    "eslint": "^10.0.0",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "globals": "^17.0.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.0"
+  }
+}

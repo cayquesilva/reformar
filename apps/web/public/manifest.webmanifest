@@ -1,0 +1,13 @@
+{
+  "name": "Reformar — Orçamentos e obras",
+  "short_name": "Reformar",
+  "description": "Orçamentos e obras para profissionais da construção.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F5F7FA",
+  "theme_color": "#0B4F8A",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

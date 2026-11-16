@@ -1,0 +1,1007 @@
+// Modelo de dados — Fase 1 (núcleo comercial).
+// Convenções:
+// - Toda tabela de negócio tem tenantId e índices começando por tenantId.
+// - Dinheiro em centavos (BigInt). Quantidades em Decimal(14,4). Percentuais em Decimal(5,2).
+// - Ver docs/MODELO_DADOS.md para o modelo completo planejado.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  runtime             = "nodejs"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  ESTIMATOR
+  FINANCE
+  FIELD
+}
+
+enum PersonType {
+  INDIVIDUAL
+  COMPANY
+}
+
+enum ServiceUnit {
+  M2
+  M
+  M3
+  UNIT
+  DAY
+  HOUR
+  LUMP_SUM
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REFUSED
+}
+
+enum DiscountType {
+  NONE
+  AMOUNT
+  PERCENT
+}
+
+enum MaterialSupply {
+  CLIENT
+  COMPANY_BILLED
+  COMPANY_INCLUDED
+}
+
+enum CostCategory {
+  TEAM
+  FOOD
+  LODGING
+  TRANSPORT
+  EQUIPMENT
+  THIRD_PARTY
+  INDIRECT
+  OTHER
+}
+
+enum ApprovalChannel {
+  IN_PERSON
+  WHATSAPP
+  PHONE
+  EMAIL
+  OTHER
+}
+
+enum ShareMode {
+  DETAILED
+  SUMMARY
+}
+
+model User {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String
+  email           String   @unique
+  passwordHash    String
+  isPlatformAdmin Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  memberships         Membership[]
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model Tenant {
+  id              String    @id @default(uuid()) @db.Uuid
+  name            String
+  /// Empresa de demonstração (dados fictícios). Nunca misturar com dados reais.
+  isDemo          Boolean   @default(false)
+  /// Contador para numeração sequencial de orçamentos por empresa.
+  quoteSeq        Int       @default(0)
+  projectSeq      Int       @default(0)
+  termsAcceptedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  profile        CompanyProfile?
+  memberships    Membership[]
+  customers      Customer[]
+  services       ServiceCatalogItem[]
+  quotes         Quote[]
+  projects       Project[]
+  attachments    Attachment[]
+  expenses       Expense[]
+  receivables    Receivable[]
+  materials      Material[]
+  stockLocations StockLocation[]
+}
+
+model CompanyProfile {
+  tenantId            String   @id @db.Uuid
+  tradeName           String
+  legalName           String?
+  document            String?
+  phone               String?
+  whatsapp            String?
+  email               String?
+  addressLine         String?
+  city                String?
+  state               String?  @db.Char(2)
+  zipCode             String?
+  primaryColor        String   @default("#1F4E79")
+  /// Logomarca pequena (até 512 KB), guardada no banco. Documentos maiores irão para armazenamento de objetos.
+  logo                Bytes?
+  logoMime            String?
+  pdfFooter           String?
+  defaultValidityDays Int      @default(15)
+  defaultPaymentTerms String?
+  defaultExclusions   String?
+  defaultNotes        String?
+  updatedAt           DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model Membership {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  tenantId  String   @db.Uuid
+  role      Role
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+}
+
+model Session {
+  id             String    @id @default(uuid()) @db.Uuid
+  /// SHA-256 do token do cookie. O token em si nunca é armazenado.
+  tokenHash      String    @unique
+  userId         String    @db.Uuid
+  activeTenantId String?   @db.Uuid
+  userAgent      String?
+  ip             String?
+  createdAt      DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Customer {
+  id          String     @id @default(uuid()) @db.Uuid
+  tenantId    String     @db.Uuid
+  type        PersonType @default(INDIVIDUAL)
+  name        String
+  document    String?
+  phone       String?
+  whatsapp    String?
+  email       String?
+  addressLine String?
+  city        String?
+  state       String?    @db.Char(2)
+  zipCode     String?
+  notes       String?
+  deletedAt   DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  quotes      Quote[]
+  projects    Project[]
+  receivables Receivable[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, name])
+}
+
+model ServiceCatalogItem {
+  id                String      @id @default(uuid()) @db.Uuid
+  tenantId          String      @db.Uuid
+  name              String
+  description       String?
+  unit              ServiceUnit
+  /// Preço padrão de mão de obra por unidade (opcional, definido pela empresa).
+  defaultPriceCents BigInt?
+  active            Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+}
+
+model Quote {
+  id                 String       @id @default(uuid()) @db.Uuid
+  tenantId           String       @db.Uuid
+  number             Int
+  customerId         String       @db.Uuid
+  title              String
+  description        String?
+  siteAddress        String?
+  siteCity           String?
+  siteState          String?      @db.Char(2)
+  status             QuoteStatus  @default(DRAFT)
+  validUntil         DateTime     @db.Date
+  paymentTerms       String?
+  exclusions         String?
+  notes              String?
+  discountType       DiscountType @default(NONE)
+  discountPercent    Decimal?     @db.Decimal(5, 2)
+  discountCents      BigInt?
+  taxPercent         Decimal      @default(0) @db.Decimal(5, 2)
+  contingencyPercent Decimal      @default(0) @db.Decimal(5, 2)
+  /// Revisão em edição/atual. Incrementa ao editar um orçamento já enviado.
+  currentRevision    Int          @default(1)
+  /// Controle de concorrência otimista (edições em aparelhos diferentes).
+  lockVersion        Int          @default(0)
+  /// Total para o cliente (cache para listagens; recalculado a cada gravação).
+  totalCents         BigInt       @default(0)
+  refusedReason      String?
+  sentAt             DateTime?
+  approvedAt         DateTime?
+  refusedAt          DateTime?
+  deletedAt          DateTime?
+  createdById        String?      @db.Uuid
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // FK composta garante que o cliente pertence à MESMA empresa do orçamento.
+  customer   Customer         @relation(fields: [tenantId, customerId], references: [tenantId, id])
+  items      QuoteItem[]
+  materials  QuoteMaterial[]
+  costs      QuoteCost[]
+  versions   QuoteVersion[]
+  approvals  QuoteApproval[]
+  shareLinks QuoteShareLink[]
+  project    Project?
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, id])
+  @@index([tenantId, status])
+  @@index([tenantId, customerId])
+  @@index([tenantId, updatedAt])
+}
+
+model QuoteItem {
+  id             String      @id @default(uuid()) @db.Uuid
+  tenantId       String      @db.Uuid
+  quoteId        String      @db.Uuid
+  position       Int
+  serviceId      String?     @db.Uuid
+  description    String
+  unit           ServiceUnit
+  quantity       Decimal     @db.Decimal(14, 4)
+  unitPriceCents BigInt
+  notes          String?
+
+  quote Quote @relation(fields: [tenantId, quoteId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, quoteId])
+}
+
+model QuoteMaterial {
+  id             String         @id @default(uuid()) @db.Uuid
+  tenantId       String         @db.Uuid
+  quoteId        String         @db.Uuid
+  position       Int
+  description    String
+  unit           String
+  supply         MaterialSupply
+  /// Índice (posição) do serviço do qual a quantidade base é derivada.
+  itemIndex      Int?
+  coefficient    Decimal?       @db.Decimal(16, 6)
+  baseQuantity   Decimal?       @db.Decimal(14, 4)
+  lossPercent    Decimal        @default(0) @db.Decimal(5, 2)
+  packageSize    Decimal?       @db.Decimal(14, 4)
+  packageLabel   String?
+  unitPriceCents BigInt?
+  notes          String?
+
+  quote Quote @relation(fields: [tenantId, quoteId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, quoteId])
+}
+
+model QuoteCost {
+  id             String       @id @default(uuid()) @db.Uuid
+  tenantId       String       @db.Uuid
+  quoteId        String       @db.Uuid
+  position       Int
+  category       CostCategory
+  description    String
+  quantity       Decimal      @db.Decimal(14, 4)
+  unit           String?
+  unitCostCents  BigInt
+  chargeToClient Boolean      @default(false)
+
+  quote Quote @relation(fields: [tenantId, quoteId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, quoteId])
+}
+
+/// Fotografia imutável de cada revisão emitida (enviada/aprovada).
+model QuoteVersion {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  quoteId     String   @db.Uuid
+  revision    Int
+  /// Documento completo (empresa, cliente, conteúdo e cálculo) no momento da emissão.
+  snapshot    Json
+  totalCents  BigInt
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  quote     Quote           @relation(fields: [tenantId, quoteId], references: [tenantId, id], onDelete: Cascade)
+  approvals QuoteApproval[]
+
+  @@unique([quoteId, revision])
+  @@unique([tenantId, id])
+  @@index([tenantId, quoteId])
+}
+
+model QuoteApproval {
+  id             String          @id @default(uuid()) @db.Uuid
+  tenantId       String          @db.Uuid
+  quoteId        String          @db.Uuid
+  versionId      String          @db.Uuid
+  approvedByName String
+  channel        ApprovalChannel
+  approvedOn     DateTime        @db.Date
+  note           String?
+  recordedById   String?         @db.Uuid
+  createdAt      DateTime        @default(now())
+
+  quote   Quote        @relation(fields: [tenantId, quoteId], references: [tenantId, id], onDelete: Cascade)
+  version QuoteVersion @relation(fields: [tenantId, versionId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, quoteId])
+}
+
+/// Link público (somente leitura) para o cliente baixar o PDF. Token guardado apenas como hash.
+model QuoteShareLink {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  quoteId      String    @db.Uuid
+  revision     Int
+  mode         ShareMode
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  accessCount  Int       @default(0)
+  lastAccessAt DateTime?
+  createdById  String?   @db.Uuid
+  createdAt    DateTime  @default(now())
+
+  quote Quote @relation(fields: [tenantId, quoteId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, quoteId])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String?  @db.Uuid
+  userId     String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  data       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, createdAt])
+}
+
+/// Evita gravações duplicadas em reenvios (rede instável, duplo toque).
+model IdempotencyKey {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  userId         String   @db.Uuid
+  key            String
+  route          String
+  completed      Boolean  @default(false)
+  responseStatus Int?
+  responseBody   Json?
+  createdAt      DateTime @default(now())
+
+  @@unique([tenantId, userId, key])
+}
+
+// =====================================================================
+// FASE 2 — Obras, medição, diário, fotos, despesas, recebimentos, estoque
+// =====================================================================
+
+enum ProjectStatus {
+  PLANNED
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  CANCELED
+}
+
+enum StageStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  DONE
+}
+
+enum MeasurementStatus {
+  DRAFT
+  CONFIRMED
+}
+
+enum AttachmentKind {
+  PHOTO
+  RECEIPT
+  DOCUMENT
+}
+
+enum ExpenseCategory {
+  MATERIAL
+  TEAM
+  FOOD
+  LODGING
+  TRANSPORT
+  EQUIPMENT
+  THIRD_PARTY
+  INDIRECT
+  OTHER
+}
+
+enum ExpenseStatus {
+  PLANNED
+  COMMITTED
+  PAID
+  CANCELED
+}
+
+enum PaymentMethod {
+  CASH
+  PIX
+  TRANSFER
+  CARD
+  BOLETO
+  CHECK
+  OTHER
+}
+
+enum ReceivableKind {
+  DOWN_PAYMENT
+  INSTALLMENT
+  MEASUREMENT
+  MILESTONE
+  OTHER
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  TRANSFER
+  LOSS
+  RETURN
+  ADJUST_IN
+  ADJUST_OUT
+}
+
+/// Obra. Criada a partir de um orçamento aprovado (vínculo com a revisão aprovada) ou avulsa.
+model Project {
+  id                      String        @id @default(uuid()) @db.Uuid
+  tenantId                String        @db.Uuid
+  number                  Int
+  quoteId                 String?       @db.Uuid
+  quoteRevision           Int?
+  customerId              String        @db.Uuid
+  name                    String
+  siteAddress             String?
+  siteCity                String?
+  siteState               String?       @db.Char(2)
+  status                  ProjectStatus @default(PLANNED)
+  startDate               DateTime?     @db.Date
+  expectedEndDate         DateTime?     @db.Date
+  completedAt             DateTime?
+  /// Valor do contrato (total aprovado). Nunca é alterado por recebimentos.
+  contractTotalCents      BigInt
+  plannedCostCents        BigInt        @default(0)
+  plannedTaxCents         BigInt        @default(0)
+  plannedContingencyCents BigInt        @default(0)
+  notes                   String?
+  createdById             String?       @db.Uuid
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer     Customer          @relation(fields: [tenantId, customerId], references: [tenantId, id])
+  quote        Quote?            @relation(fields: [tenantId, quoteId], references: [tenantId, id])
+  stages       ProjectStage[]
+  measurements Measurement[]
+  diaryEntries DiaryEntry[]
+  attachments  Attachment[]
+  expenses     Expense[]
+  receivables  Receivable[]
+  materials    ProjectMaterial[]
+  locations    StockLocation[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, id])
+  @@unique([tenantId, quoteId])
+  @@index([tenantId, status])
+}
+
+/// Etapa/serviço da obra (medível por quantidade).
+model ProjectStage {
+  id               String      @id @default(uuid()) @db.Uuid
+  tenantId         String      @db.Uuid
+  projectId        String      @db.Uuid
+  position         Int
+  name             String
+  unit             ServiceUnit
+  plannedQuantity  Decimal     @db.Decimal(14, 4)
+  unitPriceCents   BigInt      @default(0)
+  /// Soma das medições confirmadas (recalculada na confirmação).
+  measuredQuantity Decimal     @default(0) @db.Decimal(14, 4)
+  status           StageStatus @default(NOT_STARTED)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  project          Project           @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  measurementItems MeasurementItem[]
+  attachments      Attachment[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, projectId])
+}
+
+/// Medição: registro do serviço executado no período, com fotos. Confirmada = imutável.
+model Measurement {
+  id            String            @id @default(uuid()) @db.Uuid
+  tenantId      String            @db.Uuid
+  projectId     String            @db.Uuid
+  number        Int
+  measuredOn    DateTime          @db.Date
+  notes         String?
+  status        MeasurementStatus @default(DRAFT)
+  totalCents    BigInt            @default(0)
+  createdById   String?           @db.Uuid
+  confirmedById String?           @db.Uuid
+  confirmedAt   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  project     Project           @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  items       MeasurementItem[]
+  attachments Attachment[]
+  receivable  Receivable?
+
+  @@unique([projectId, number])
+  @@unique([tenantId, id])
+  @@index([tenantId, projectId])
+}
+
+model MeasurementItem {
+  id            String  @id @default(uuid()) @db.Uuid
+  tenantId      String  @db.Uuid
+  measurementId String  @db.Uuid
+  stageId       String  @db.Uuid
+  /// Quantidade executada NESTE período.
+  quantity      Decimal @db.Decimal(14, 4)
+  valueCents    BigInt  @default(0)
+  notes         String?
+
+  measurement Measurement  @relation(fields: [tenantId, measurementId], references: [tenantId, id], onDelete: Cascade)
+  stage       ProjectStage @relation(fields: [tenantId, stageId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([measurementId, stageId])
+}
+
+/// Diário de obra.
+model DiaryEntry {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  projectId    String   @db.Uuid
+  date         DateTime @db.Date
+  text         String
+  weather      String?
+  workersCount Int?
+  createdById  String?  @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project     Project      @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  attachments Attachment[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, projectId, date])
+}
+
+/// Arquivo (foto, comprovante). O binário fica no armazenamento (chave prefixada pela empresa).
+model Attachment {
+  id            String         @id @default(uuid()) @db.Uuid
+  tenantId      String         @db.Uuid
+  kind          AttachmentKind @default(PHOTO)
+  projectId     String?        @db.Uuid
+  stageId       String?        @db.Uuid
+  measurementId String?        @db.Uuid
+  diaryEntryId  String?        @db.Uuid
+  expenseId     String?        @db.Uuid
+  storageKey    String         @unique
+  mime          String
+  sizeBytes     Int
+  caption       String?
+  takenAt       DateTime?
+  uploadedById  String?        @db.Uuid
+  createdAt     DateTime       @default(now())
+  deletedAt     DateTime?
+
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project     Project?      @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  stage       ProjectStage? @relation(fields: [tenantId, stageId], references: [tenantId, id], onDelete: Cascade)
+  measurement Measurement?  @relation(fields: [tenantId, measurementId], references: [tenantId, id], onDelete: Cascade)
+  diaryEntry  DiaryEntry?   @relation(fields: [tenantId, diaryEntryId], references: [tenantId, id], onDelete: Cascade)
+  expense     Expense?      @relation(fields: [tenantId, expenseId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, projectId])
+}
+
+/// Despesa = compromisso financeiro. Pagar muda o status (não cria outro lançamento).
+model Expense {
+  id            String          @id @default(uuid()) @db.Uuid
+  tenantId      String          @db.Uuid
+  projectId     String?         @db.Uuid
+  /// Lançamentos criados juntos (rateio entre obras) compartilham o groupId.
+  groupId       String?         @db.Uuid
+  category      ExpenseCategory
+  description   String
+  quantity      Decimal?        @db.Decimal(14, 4)
+  unit          String?
+  amountCents   BigInt
+  /// Data de competência (quando o gasto aconteceu).
+  date          DateTime        @db.Date
+  dueDate       DateTime?       @db.Date
+  status        ExpenseStatus   @default(COMMITTED)
+  paidOn        DateTime?       @db.Date
+  paymentMethod PaymentMethod?
+  supplier      String?
+  worker        String?
+  notes         String?
+  cancelReason  String?
+  canceledAt    DateTime?
+  createdById   String?         @db.Uuid
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project     Project?        @relation(fields: [tenantId, projectId], references: [tenantId, id])
+  attachments Attachment[]
+  movements   StockMovement[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, projectId])
+  @@index([tenantId, status, dueDate])
+  @@index([tenantId, date])
+}
+
+/// Conta a receber (entrada, parcela, medição, marco).
+model Receivable {
+  id            String         @id @default(uuid()) @db.Uuid
+  tenantId      String         @db.Uuid
+  projectId     String?        @db.Uuid
+  customerId    String         @db.Uuid
+  measurementId String?        @unique @db.Uuid
+  kind          ReceivableKind
+  description   String
+  amountCents   BigInt
+  dueDate       DateTime       @db.Date
+  cancelReason  String?
+  canceledAt    DateTime?
+  createdById   String?        @db.Uuid
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project     Project?            @relation(fields: [tenantId, projectId], references: [tenantId, id])
+  customer    Customer            @relation(fields: [tenantId, customerId], references: [tenantId, id])
+  measurement Measurement?        @relation(fields: [tenantId, measurementId], references: [tenantId, id])
+  payments    ReceivablePayment[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, measurementId])
+  @@index([tenantId, projectId])
+  @@index([tenantId, dueDate])
+}
+
+/// Pagamento recebido (pode ser parcial). Estorno preserva o registro.
+model ReceivablePayment {
+  id            String        @id @default(uuid()) @db.Uuid
+  tenantId      String        @db.Uuid
+  receivableId  String        @db.Uuid
+  amountCents   BigInt
+  paidOn        DateTime      @db.Date
+  method        PaymentMethod
+  note          String?
+  recordedById  String?       @db.Uuid
+  createdAt     DateTime      @default(now())
+  reversedAt    DateTime?
+  reversedById  String?       @db.Uuid
+  reverseReason String?
+
+  receivable Receivable @relation(fields: [tenantId, receivableId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, receivableId])
+  @@index([tenantId, paidOn])
+}
+
+model Material {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid
+  name          String
+  unit          String
+  packageLabel  String?
+  packageSize   Decimal? @db.Decimal(14, 4)
+  minStock      Decimal? @db.Decimal(14, 4)
+  lastCostCents BigInt?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  movements        StockMovement[]
+  projectMaterials ProjectMaterial[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+}
+
+/// Local de estoque: depósito da empresa ou a própria obra.
+model StockLocation {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  projectId String?  @unique @db.Uuid
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project  Project?        @relation(fields: [tenantId, projectId], references: [tenantId, id])
+  incoming StockMovement[] @relation("MovementTo")
+  outgoing StockMovement[] @relation("MovementFrom")
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+}
+
+/// Movimento FÍSICO de material. Não gera custo financeiro (o custo vem da despesa vinculada).
+model StockMovement {
+  id             String            @id @default(uuid()) @db.Uuid
+  tenantId       String            @db.Uuid
+  materialId     String            @db.Uuid
+  type           StockMovementType
+  quantity       Decimal           @db.Decimal(14, 4)
+  fromLocationId String?           @db.Uuid
+  toLocationId   String?           @db.Uuid
+  projectId      String?           @db.Uuid
+  expenseId      String?           @db.Uuid
+  unitCostCents  BigInt?
+  date           DateTime          @db.Date
+  notes          String?
+  createdById    String?           @db.Uuid
+  createdAt      DateTime          @default(now())
+
+  material     Material       @relation(fields: [tenantId, materialId], references: [tenantId, id])
+  fromLocation StockLocation? @relation("MovementFrom", fields: [tenantId, fromLocationId], references: [tenantId, id])
+  toLocation   StockLocation? @relation("MovementTo", fields: [tenantId, toLocationId], references: [tenantId, id])
+  expense      Expense?       @relation(fields: [tenantId, expenseId], references: [tenantId, id])
+
+  @@index([tenantId, materialId])
+  @@index([tenantId, projectId])
+}
+
+/// Material previsto para a obra (vem do orçamento; revisável).
+model ProjectMaterial {
+  id              String         @id @default(uuid()) @db.Uuid
+  tenantId        String         @db.Uuid
+  projectId       String         @db.Uuid
+  materialId      String?        @db.Uuid
+  description     String
+  unit            String
+  plannedQuantity Decimal        @db.Decimal(14, 4)
+  /// Quantidade prevista em embalagens (ex.: 8 sacos), quando o orçamento informou embalagem.
+  plannedPackages Int?
+  packageLabel    String?
+  supply          MaterialSupply
+  createdAt       DateTime       @default(now())
+
+  project  Project   @relation(fields: [tenantId, projectId], references: [tenantId, id], onDelete: Cascade)
+  material Material? @relation(fields: [tenantId, materialId], references: [tenantId, id])
+
+  @@index([tenantId, projectId])
+}
+
+// =====================================================================
+// FASE 3 — Assistente (texto/voz). A IA só PROPÕE; gravação exige confirmação.
+// =====================================================================
+
+enum AiInteractionStatus {
+  PROPOSED
+  ANSWERED
+  EXECUTED
+  REJECTED
+  FAILED
+}
+
+model AiInteraction {
+  id            String              @id @default(uuid()) @db.Uuid
+  tenantId      String              @db.Uuid
+  userId        String              @db.Uuid
+  /// Interação anterior usada como contexto (ex.: "troque a metragem para 40").
+  previousId    String?             @db.Uuid
+  inputText     String
+  intent        String
+  /// Saída validada do modelo + proposta convertida pelo servidor.
+  output        Json
+  status        AiInteractionStatus
+  /// Registro criado ao confirmar (ex.: id do gasto ou do orçamento).
+  resultType    String?
+  resultId      String?             @db.Uuid
+  model         String
+  inputTokens   Int                 @default(0)
+  outputTokens  Int                 @default(0)
+  executedById  String?             @db.Uuid
+  executedAt    DateTime?
+  createdAt     DateTime            @default(now())
+
+  @@unique([tenantId, id])
+  @@index([tenantId, userId, createdAt])
+}
+
+/// Consumo mensal de IA por empresa (controle de custo e limite do plano).
+model AiUsage {
+  tenantId     String @db.Uuid
+  month        String @db.Char(7)
+  requests     Int    @default(0)
+  inputTokens  Int    @default(0)
+  outputTokens Int    @default(0)
+
+  @@id([tenantId, month])
+}
+
+// =====================================================================
+// FASE 4 — Assinatura da PLATAFORMA (Asaas). Nunca misturar com o dinheiro das obras.
+// =====================================================================
+
+enum SubscriptionStatus {
+  TRIALING
+  PENDING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELED
+}
+
+enum ProviderEventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+model SubscriptionPlan {
+  id                String   @id @default(uuid()) @db.Uuid
+  code              String   @unique
+  name              String
+  description       String?
+  priceCents        BigInt
+  /// MONTHLY ou YEARLY (ciclo do Asaas).
+  cycle             String   @default("MONTHLY")
+  maxUsers          Int?
+  maxActiveProjects Int?
+  aiMonthlyRequests Int      @default(0)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  subscriptions TenantSubscription[]
+}
+
+model TenantSubscription {
+  tenantId            String             @id @db.Uuid
+  planId              String             @db.Uuid
+  status              SubscriptionStatus
+  trialEndsAt         DateTime?
+  /// Fim do período já pago (acesso garantido até esta data mesmo após cancelar).
+  currentPeriodEnd    DateTime?          @db.Date
+  graceUntil          DateTime?          @db.Date
+  asaasCustomerId     String?
+  asaasSubscriptionId String?            @unique
+  /// Meio de pagamento da assinatura: ASAAS ou PAYPAL (null = ainda não contratou).
+  provider            String?
+  paypalSubscriptionId String?           @unique
+  billingType         String?
+  lastPaymentAt       DateTime?
+  canceledAt          DateTime?
+  lastSyncAt          DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  plan SubscriptionPlan @relation(fields: [planId], references: [id])
+}
+
+/// Meio de pagamento configurado pela administração da plataforma (Asaas, PayPal).
+/// Credenciais ficam cifradas (AES-256-GCM, chave SECRETS_KEY do servidor) e nunca voltam para o navegador.
+model PaymentProviderConfig {
+  provider        String    @id
+  enabled         Boolean   @default(false)
+  /// SANDBOX ou PRODUCTION
+  environment     String    @default("SANDBOX")
+  secrets         String?
+  /// Dados não secretos (ex.: id do webhook e do produto no PayPal).
+  settings        Json      @default("{}")
+  lastTestAt      DateTime?
+  lastTestOk      Boolean?
+  lastTestMessage String?
+  updatedById     String?   @db.Uuid
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+/// Plano criado no provedor para um plano nosso (o PayPal cobra por um plano dele, com preço fixo).
+/// Preço ou ciclo mudou => novo plano no provedor; os antigos continuam valendo para quem já assinou.
+model PaymentProviderPlan {
+  id             String   @id @default(uuid()) @db.Uuid
+  provider       String
+  environment    String
+  planId         String   @db.Uuid
+  priceCents     BigInt
+  cycle          String
+  externalPlanId String
+  createdAt      DateTime @default(now())
+
+  @@unique([provider, environment, planId, priceCents, cycle])
+}
+
+/// Evento recebido do provedor (webhook), guardado ANTES de processar. id externo único = idempotência.
+model PaymentProviderEvent {
+  id          String              @id @default(uuid()) @db.Uuid
+  provider    String
+  externalId  String
+  eventType   String
+  payload     Json
+  status      ProviderEventStatus @default(RECEIVED)
+  attempts    Int                 @default(0)
+  lastError   String?
+  tenantId    String?             @db.Uuid
+  receivedAt  DateTime            @default(now())
+  processedAt DateTime?
+
+  @@unique([provider, externalId])
+  @@index([status, receivedAt])
+}

@@ -1,0 +1,175 @@
+/* =====================================================================
+   Reformar v3 — tokens de design
+   Mesma identidade da página pública: azul-noite da "prancha", azul da marca e amarelo de destaque.
+   Temas: claro e escuro (data-theme no <html>, aplicado por public/theme-init.js e lib/theme.ts).
+   Contraste conferido: texto ≥ 4,5:1 (AA), bordas de campos e ícones ≥ 3:1 (WCAG 1.4.11) nos dois temas.
+   ===================================================================== */
+:root {
+  color-scheme: light;
+
+  /* superfícies */
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #f8f9fb;
+  --surface-3: #eef1f5;
+  --overlay: rgb(9 17 27 / 0.48);
+  --glass: rgb(255 255 255 / 0.78);
+
+  /* texto */
+  --text: #0e1824;
+  --text-2: #2e3b4b;
+  --muted: #4c5a6b;
+  --subtle: #5b697b;
+  --placeholder: #7a8696;
+
+  /* linhas */
+  --line: #e3e7ed;
+  --line-soft: #edf0f4;
+  --line-strong: #8a94a3;
+  --line-hover: #657185;
+
+  /* marca */
+  --brand: #1559a8; /* texto/ícone de destaque e links */
+  --brand-strong: #0d3f78;
+  --brand-50: #edf3fb;
+  --brand-100: #d9e6f7;
+  --brand-200: #b4cdee;
+  --primary: #1559a8; /* fundo do botão principal */
+  --primary-hover: #114a8e;
+  --primary-press: #0e3f79;
+  --on-primary: #ffffff;
+  --accent: #f5b700;
+  --accent-hover: #ffc72e;
+  --on-accent: #0b1622;
+  --night: #0b1622;
+  --night-2: #12202f;
+
+  /* estados */
+  --green: #067647;
+  --green-bg: #ecfdf3;
+  --green-line: #abefc6;
+  --green-solid: #12b76a;
+  --red: #b42318;
+  --red-bg: #fef3f2;
+  --red-line: #fecdca;
+  --red-solid: #d92d20;
+  --yellow: #8a3a0b;
+  --yellow-bg: #fffaeb;
+  --yellow-line: #fedf89;
+  --violet: #5925dc;
+  --violet-bg: #f4f3ff;
+  --gray-bg: #f1f3f6;
+  --gray: #3d4a5a;
+
+  /* gráficos (validados: ver components/charts.tsx) */
+  --series-in: #2a78d6;
+  --series-out: #eb6834;
+  --chart-grid: #e8ebf0;
+  --chart-base: #98a2b3;
+  --ring-track: #e6eaf0;
+  --track: #e9edf2;
+
+  /* foco: anel azul (≥ 3:1) com halo amarelo da marca */
+  --focus: #1559a8;
+  --focus-halo: rgb(245 183 0 / 0.55);
+
+  /* barra lateral (escura nos dois temas, como a prancha da página pública) */
+  --sb-bg: #0b1622;
+  --sb-line: rgb(255 255 255 / 0.08);
+  --sb-text: #c7d3e0;
+  --sb-muted: #8fa3b8;
+  --sb-hover: rgb(255 255 255 / 0.06);
+  --sb-active: rgb(255 255 255 / 0.1);
+
+  /* forma */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 26px;
+  --shadow-xs: 0 1px 2px rgb(14 24 36 / 0.05);
+  --shadow-sm: 0 1px 2px rgb(14 24 36 / 0.04), 0 2px 6px -2px rgb(14 24 36 / 0.06);
+  --shadow-md: 0 10px 24px -10px rgb(14 24 36 / 0.16), 0 2px 6px -2px rgb(14 24 36 / 0.06);
+  --shadow-lg: 0 28px 60px -20px rgb(14 24 36 / 0.32), 0 6px 16px -6px rgb(14 24 36 / 0.12);
+  --hl: inset 0 1px 0 rgb(255 255 255 / 0.18); /* brilho superior dos botões cheios */
+
+  /* medidas */
+  --tap: 48px;
+  --control: 46px;
+  --sb-w: 268px;
+  --sb-rail: 76px;
+  --topbar: 64px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  --font-ui: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Archivo Variable', 'Inter Variable', system-ui, sans-serif;
+}
+
+@media (min-width: 1024px) {
+  :root { --tap: 44px; --control: 42px; }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #08111b;
+  --surface: #0f1b28;
+  --surface-2: #132131;
+  --surface-3: #1a2a3c;
+  --overlay: rgb(2 6 12 / 0.66);
+  --glass: rgb(12 22 33 / 0.78);
+
+  --text: #e8eef5;
+  --text-2: #cbd6e2;
+  --muted: #a5b4c4;
+  --subtle: #8d9fb3;
+  --placeholder: #7d8fa3;
+
+  --line: #1f3042;
+  --line-soft: #182737;
+  --line-strong: #5f7387;
+  --line-hover: #7e93a8;
+
+  --brand: #6aa8f0;
+  --brand-strong: #a9cdf7;
+  --brand-50: rgb(106 168 240 / 0.12);
+  --brand-100: rgb(106 168 240 / 0.22);
+  --brand-200: rgb(106 168 240 / 0.38);
+  --primary: #2a6fc4;
+  --primary-hover: #3479cf;
+  --primary-press: #2462ae;
+
+  --green: #4fd194;
+  --green-bg: rgb(79 209 148 / 0.1);
+  --green-line: rgb(79 209 148 / 0.32);
+  --green-solid: #2fb879;
+  --red: #ff8f85;
+  --red-bg: rgb(255 120 108 / 0.1);
+  --red-line: rgb(255 120 108 / 0.32);
+  --red-solid: #e5483b;
+  --yellow: #f6c75a;
+  --yellow-bg: rgb(245 183 0 / 0.1);
+  --yellow-line: rgb(245 183 0 / 0.32);
+  --violet: #b8a6ff;
+  --violet-bg: rgb(160 140 255 / 0.12);
+  --gray-bg: rgb(255 255 255 / 0.06);
+  --gray: #c3cfdb;
+
+  --chart-grid: #1d2d3f;
+  --chart-base: #5f7387;
+  --ring-track: #1d2e41;
+  --track: #1b2b3d;
+
+  --focus: #8cbdf5;
+  --focus-halo: rgb(245 183 0 / 0.45);
+
+  --sb-bg: #060d15;
+  --sb-line: rgb(255 255 255 / 0.07);
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 8px -2px rgb(0 0 0 / 0.35);
+  --shadow-md: 0 14px 30px -12px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 30px 70px -20px rgb(0 0 0 / 0.75), 0 8px 18px -6px rgb(0 0 0 / 0.5);
+  --hl: inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
